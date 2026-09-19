@@ -4,7 +4,7 @@ if (NOT DEFINED CMAKE_BUILD_TYPE AND NOT DEFINED ENV{CMAKE_BUILD_TYPE})
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build type")
 endif ()
 
-project(my_mod VERSION 1.0.0 LANGUAGES CXX)
+project(phong_lighting_mod VERSION 1.0.0 LANGUAGES CXX)
 
 # The Dusklight version to build against: a release tag (e.g. "v2.0.0") or a commit SHA.
 if (NOT DUSKLIGHT_VERSION)
@@ -15,13 +15,9 @@ endif ()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchDusklight.cmake")
 add_subdirectory("${DUSKLIGHT_DIR}/sdk" dusklight-sdk EXCLUDE_FROM_ALL)
 
-configure_file(mod.json.in "${CMAKE_CURRENT_BINARY_DIR}/mod.json" @ONLY NEWLINE_STYLE LF)
-
-add_mod(my_mod
-        FEATURES game          # remove for service/asset-only mods; add webgpu for GfxService
+add_mod(phong_lighting_mod
+        FEATURES game webgpu
         SOURCES src/mod.cpp
-        MOD_JSON "${CMAKE_CURRENT_BINARY_DIR}/mod.json"
-        RES_DIR res            # mod resources, including icon.png and banner.png
-        OVERLAY_DIR overlay    # game file overlays; remove if unused
-        TEXTURES_DIR textures  # texture replacements; remove if unused
+        MOD_JSON mod.json
+        RES_DIR res
 )
