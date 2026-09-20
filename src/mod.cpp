@@ -6,6 +6,8 @@
 #include "mods/svc/camera.h"
 #include "mods/svc/config.h"
 #include "mods/svc/gfx.h"
+#include "mods/svc/hook.h"
+#include "mods/svc/hook.hpp"
 #include "mods/svc/log.h"
 #include "mods/svc/resource.h"
 #include "mods/svc/ui.h"
@@ -23,14 +25,19 @@ IMPORT_SERVICE(ResourceService, svc_resource);
 IMPORT_SERVICE(UiService, svc_ui);
 IMPORT_SERVICE(GfxService, svc_gfx);
 IMPORT_SERVICE(CameraService, svc_camera);
+IMPORT_SERVICE(HookService, svc_hook);
 
 namespace {
+
+DEFINE_HOOK(dKy_setLight_nowroom_actor, SetLightNowroomActor);
 
 ConfigVarHandle g_cvarEnabled = 0;
 ConfigVarHandle g_cvarEnableSpecular = 0;
 ConfigVarHandle g_cvarEnableRim = 0;
 ConfigVarHandle g_cvarSpecularPct = 0;
 ConfigVarHandle g_cvarRimPct = 0;
+ConfigVarHandle g_cvarAmbientPct = 0;
+ConfigVarHandle g_cvarDiffusePct = 0;
 
 GfxDrawTypeHandle g_drawType = 0;
 GfxStageHookHandle g_afterOpaqueHook = 0;
@@ -137,6 +144,42 @@ uint32_t gather_lights(GpuLight* lights) {
         }
     }
     return count;
+}
+
+template <class T>
+T scale_color_channel(T value, float multiplier) {
+    return static_cast<T>(std::clamp(static_cast<float>(value) * multiplier, 0.0f, 255.0f));
+}
+
+void on_set_light_nowroom_actor_post(ModContext*, void* args, void*, void*) {
+    if (!get_bool_option(g_cvarEnabled, false)) {
+        return;
+    }
+    dKy_tevstr_c* tevstr_p = mods::arg<dKy_tevstr_c*>(args, 0);
+    if (tevstr_p == nullptr) {
+        return;
+    }
+
+    const float ambientMultiplier =
+        static_cast<float>(std::clamp<int64_t>(get_int_option(g_cvarAmbientPct, 100), 0, 300)) /
+        100.0f;
+    const float diffuseMultiplier =
+        static_cast<float>(std::clamp<int64_t>(get_int_option(g_cvarDiffusePct, 100), 0, 300)) /
+        100.0f;
+
+    if (ambientMultiplier != 1.0f) {
+        tevstr_p->AmbCol.r = scale_color_channel(tevstr_p->AmbCol.r, ambientMultiplier);
+        tevstr_p->AmbCol.g = scale_color_channel(tevstr_p->AmbCol.g, ambientMultiplier);
+        tevstr_p->AmbCol.b = scale_color_channel(tevstr_p->AmbCol.b, ambientMultiplier);
+    }
+    if (diffuseMultiplier != 1.0f) {
+        for (J3DLightObj& lightObj : tevstr_p->mLights) {
+            J3DLightInfo* light = lightObj.getLightInfo();
+            light->mColor.r = scale_color_channel(light->mColor.r, diffuseMultiplier);
+            light->mColor.g = scale_color_channel(light->mColor.g, diffuseMultiplier);
+            light->mColor.b = scale_color_channel(light->mColor.b, diffuseMultiplier);
+        }
+    }
 }
 
 void release_pipeline() {
@@ -379,6 +422,11 @@ ModResult build_controls_tab(
     add_toggle(left, "Rim Lighting", g_cvarEnableRim,
         "Fresnel-style edge highlight; independent of the light direction.");
     add_number(left, "Rim Intensity", g_cvarRimPct, 0, 50, 1, "%", nullptr);
+    add_number(left, "Ambient Multiplier", g_cvarAmbientPct, 0, 300, 5, "%",
+        "Scales every object's ambient light term directly, before the opaque scene is drawn.");
+    add_number(left, "Diffuse Multiplier", g_cvarDiffusePct, 0, 300, 5, "%",
+        "Scales every object's per-light diffuse color directly, before the opaque scene is "
+        "drawn.");
     return MOD_OK;
 }
 
@@ -472,6 +520,14 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     if (result != MOD_OK) {
         return result;
     }
+    result = register_int_option("ambientMultiplier", 100, g_cvarAmbientPct, error);
+    if (result != MOD_OK) {
+        return result;
+    }
+    result = register_int_option("diffuseMultiplier", 100, g_cvarDiffusePct, error);
+    if (result != MOD_OK) {
+        return result;
+    }
 
     if (svc_gfx->get_device_info(mod_ctx, &g_deviceInfo) != MOD_OK) {
         return mods::set_error(error, MOD_ERROR, "failed to query device info");
@@ -490,6 +546,9 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     {
         return mods::set_error(error, MOD_ERROR, "failed to register stage hook");
     }
+    if (mods::hook::add_post<SetLightNowroomActor>(on_set_light_nowroom_actor_post) != MOD_OK) {
+        return mods::set_error(error, MOD_ERROR, "failed to hook dKy_setLight_nowroom_actor");
+    }
 
     UiModsPanelDesc panelDesc = UI_MODS_PANEL_DESC_INIT;
     panelDesc.build = build_panel;
@@ -506,7 +565,7 @@ MOD_EXPORT ModResult mod_shutdown(ModError*) {
     svc_resource->free(mod_ctx, &g_shaderSource);
     release_pipeline();
     g_cvarEnabled = g_cvarEnableSpecular = g_cvarEnableRim = 0;
-    g_cvarSpecularPct = g_cvarRimPct = 0;
+    g_cvarSpecularPct = g_cvarRimPct = g_cvarAmbientPct = g_cvarDiffusePct = 0;
     g_drawType = g_afterOpaqueHook = 0;
     g_controlsWindow = 0;
     return MOD_OK;
