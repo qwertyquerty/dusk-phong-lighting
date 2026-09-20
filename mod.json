@@ -1,7 +1,7 @@
 {
   "id": "dev.maddietp.phong_lighting_mod",
   "name": "Phong Lighting",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Maddie",
   "description": "Adds Blinn-Phong and Fresnel rim lighting model shaders"
 }

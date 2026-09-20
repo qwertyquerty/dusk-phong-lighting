@@ -41,7 +41,6 @@ ConfigVarHandle g_cvarDiffusePct = 0;
 
 GfxDrawTypeHandle g_drawType = 0;
 GfxStageHookHandle g_afterOpaqueHook = 0;
-UiWindowHandle g_controlsWindow = 0;
 
 ResourceBuffer g_shaderSource = RESOURCE_BUFFER_INIT;
 GfxDeviceInfo g_deviceInfo = GFX_DEVICE_INFO_INIT;
@@ -383,22 +382,20 @@ void add_control(UiElementHandle pane, const UiControlDesc& desc) {
     svc_ui->pane_add_control(mod_ctx, pane, &desc, nullptr);
 }
 
-void add_toggle(UiElementHandle pane, const char* label, ConfigVarHandle cvar, const char* help) {
+void add_toggle(UiElementHandle pane, const char* label, ConfigVarHandle cvar) {
     UiControlDesc control = UI_CONTROL_DESC_INIT;
     control.kind = UI_CONTROL_TOGGLE;
     control.label = label;
-    control.help_rml = help;
     control.binding = UI_BINDING_CONFIG_VAR;
     control.config_var = cvar;
     add_control(pane, control);
 }
 
 void add_number(UiElementHandle pane, const char* label, ConfigVarHandle cvar, int64_t min,
-    int64_t max, int64_t step, const char* suffix, const char* help) {
+    int64_t max, int64_t step, const char* suffix) {
     UiControlDesc control = UI_CONTROL_DESC_INIT;
     control.kind = UI_CONTROL_NUMBER;
     control.label = label;
-    control.help_rml = help;
     control.binding = UI_BINDING_CONFIG_VAR;
     control.config_var = cvar;
     control.min = min;
@@ -408,61 +405,14 @@ void add_number(UiElementHandle pane, const char* label, ConfigVarHandle cvar, i
     add_control(pane, control);
 }
 
-ModResult build_controls_tab(
-    ModContext*, UiWindowHandle, UiElementHandle left, UiElementHandle right, void*, ModError*) {
-    (void)right;
-
-    svc_ui->pane_add_section(mod_ctx, left, "Phong Lighting");
-    add_toggle(left, "Enabled", g_cvarEnabled,
-        "Adds specular highlights and rim lighting over the opaque world.");
-    add_toggle(left, "Specular Highlights", g_cvarEnableSpecular,
-        "Blinn-Phong highlight from every active light: the sun/moon, torches, effect lights, "
-        "and background-part lights.");
-    add_number(left, "Specular Intensity", g_cvarSpecularPct, 0, 100, 5, "%", nullptr);
-    add_toggle(left, "Rim Lighting", g_cvarEnableRim,
-        "Fresnel-style edge highlight; independent of the light direction.");
-    add_number(left, "Rim Intensity", g_cvarRimPct, 0, 50, 1, "%", nullptr);
-    add_number(left, "Ambient Multiplier", g_cvarAmbientPct, 0, 300, 5, "%",
-        "Scales every object's ambient light term directly, before the opaque scene is drawn.");
-    add_number(left, "Diffuse Multiplier", g_cvarDiffusePct, 0, 300, 5, "%",
-        "Scales every object's per-light diffuse color directly, before the opaque scene is "
-        "drawn.");
-    return MOD_OK;
-}
-
-void on_controls_window_closed(ModContext*, UiWindowHandle, void*) {
-    g_controlsWindow = 0;
-}
-
-void on_open_controls(ModContext*, void*) {
-    if (g_controlsWindow != 0) {
-        return;
-    }
-    UiTabDesc tabs[1] = {UI_TAB_DESC_INIT};
-    tabs[0].title = "Controls";
-    tabs[0].build = build_controls_tab;
-    UiWindowDesc desc = UI_WINDOW_DESC_INIT;
-    desc.tabs = tabs;
-    desc.tab_count = 1;
-    desc.on_closed = on_controls_window_closed;
-    if (svc_ui->window_push(mod_ctx, &desc, &g_controlsWindow) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to open phong lighting controls window");
-    }
-}
-
 ModResult build_panel(ModContext*, UiElementHandle panel, void*, ModError*) {
-    UiControlDesc control = UI_CONTROL_DESC_INIT;
-    control.kind = UI_CONTROL_TOGGLE;
-    control.label = "Enabled";
-    control.binding = UI_BINDING_CONFIG_VAR;
-    control.config_var = g_cvarEnabled;
-    add_control(panel, control);
-
-    control = UI_CONTROL_DESC_INIT;
-    control.kind = UI_CONTROL_BUTTON;
-    control.label = "Open Controls";
-    control.on_pressed = on_open_controls;
-    add_control(panel, control);
+    add_toggle(panel, "Enabled", g_cvarEnabled);
+    add_toggle(panel, "Specular Highlights", g_cvarEnableSpecular);
+    add_number(panel, "Specular Intensity", g_cvarSpecularPct, 0, 100, 5, "%");
+    add_toggle(panel, "Rim Lighting", g_cvarEnableRim);
+    add_number(panel, "Rim Intensity", g_cvarRimPct, 0, 50, 1, "%");
+    add_number(panel, "Ambient Multiplier", g_cvarAmbientPct, 0, 300, 5, "%");
+    add_number(panel, "Diffuse Multiplier", g_cvarDiffusePct, 0, 300, 5, "%");
     return MOD_OK;
 }
 
@@ -567,7 +517,6 @@ MOD_EXPORT ModResult mod_shutdown(ModError*) {
     g_cvarEnabled = g_cvarEnableSpecular = g_cvarEnableRim = 0;
     g_cvarSpecularPct = g_cvarRimPct = g_cvarAmbientPct = g_cvarDiffusePct = 0;
     g_drawType = g_afterOpaqueHook = 0;
-    g_controlsWindow = 0;
     return MOD_OK;
 }
 
